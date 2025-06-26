@@ -1,0 +1,62 @@
+# .github/workflows/deploy.yml - VERSIÓN CORREGIDA Y ROBUSTA
+
+name: Deploy Locally with Self-Hosted Runner
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+env:
+  DOCKER_PROJECT_NAME: 'ecomapp'
+  APP_CONTAINER_NAME: 'product_app'
+
+jobs:
+  build-and-deploy:
+    name: Build and Deploy Locally
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17 and Maven Cache
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build with Maven
+        run: mvn -B clean package -DskipTests
+
+      # 4. Desplegar la aplicación usando Docker Compose (¡SIMPLIFICADO!)
+      - name: Deploy with Docker Compose
+        run: |
+          echo "✅ Iniciando despliegue en el runner local..."
+          
+          # Navegamos a la carpeta que contiene el docker-compose.yml
+          cd docker
+          
+          # 1️⃣ Limpiamos cualquier despliegue anterior
+          echo "🧹 Limpiando despliegue anterior (si existe)..."
+          docker-compose -p ${{ env.DOCKER_PROJECT_NAME }} down -v --remove-orphans
+
+          # 2️⃣ Construimos y levantamos. Docker Compose se encargará de la espera y el orden.
+          # La imagen de MySQL se encargará de ejecutar init.sql por sí misma.
+          echo "🏗️ Construyendo y levantando los servicios..."
+          docker-compose -p ${{ env.DOCKER_PROJECT_NAME }} up -d --build
+
+          # ¡YA NO NECESITAMOS SLEEP NI DOCKER EXEC!
+
+          # 3️⃣ Verificamos el estado final
+          echo "🔍 Verificando estado de los contenedores..."
+          docker-compose -p ${{ env.DOCKER_PROJECT_NAME }} ps
+          
+          echo "⏳ Esperando 15 segundos para que la aplicación inicie completamente y poder ver los logs..."
+          sleep 15
+
+          echo "🗒️ Mostrando los últimos logs de la aplicación:"
+          docker logs --tail 500 ${{ env.APP_CONTAINER_NAME }}
+          
+          echo "🎉 ✓ Despliegue local completado exitosamente."
